@@ -20,3 +20,4 @@ class TargetItem(scrapy.Item):
     num_ratings = scrapy.Field()
     name = scrapy.Field()
     img_url = scrapy.Field()
+    external_id = scrapy.Field()

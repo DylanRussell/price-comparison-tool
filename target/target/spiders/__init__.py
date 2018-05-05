@@ -3,7 +3,7 @@
 # Please refer to the documentation for information on how to create and manage
 # your spiders.
 import scrapy, json, logging, random
-from urllib.parse import urlencode
+from urllib import urlencode
 from scrapy.shell import inspect_response
 from scrapy import Request
 from target.items import TargetItem
@@ -31,6 +31,8 @@ class TargetSpider(scrapy.Spider):
 
     def parse_category2(self, response):
         items = json.loads(response.body_as_unicode())
+        if not items.get('search_response'):
+            raise StopIteration
         cat = response.meta['category']
         params = {'count': numListings, 'category': cat, 'channel': 'web', 'pageId': '/c/'}
         params['sort_by'] = random.choice(self.sort_by)
@@ -56,27 +58,38 @@ class TargetSpider(scrapy.Spider):
         try:
             items = json.loads(response.body_as_unicode())['search_response']['items']['Item']
         except ValueError:
-            return Request(response.url, dont_filter=True, callback=self.parse_listing)
+            yield Request(response.url, dont_filter=True, callback=self.parse_listing)
+            raise StopIteration
         for listing in items:
             if listing['tcin'] not in self.upcs and not listing.get('error_message'):
                 self.upcs.add(listing['tcin'])
                 item = TargetItem()
                 if listing['offer_price'].get('formatted_price'):
-                    item['price'] = listing['offer_price']['formatted_price']
+                    price = listing['offer_price']['formatted_price'].replace('$', '').replace(',', '')
+                    if '-' in price:
+                        p1, p2 = price.split('-')[0].strip(), price.split('-')[1].strip()
+                        price = (float(p1) + float(p2)) / 2.0
+                    else:
+                        try:
+                            price = float(price.strip())
+                        except ValueError:
+                            price = None
+                    item['price'] = price
                 else:
-                    item['price'] = listing['offer_price'].get('min_price', '0')
-                item['brand'] = listing.get('brand', 'None Given')
-                item['avail'] = listing.get('availability_status', 'None Given')
+                    item['price'] = listing['offer_price'].get('min_price', 0)
+                item['external_id'] = listing['tcin']
+                item['brand'] = listing.get('brand', None)
+                item['avail'] = listing.get('availability_status', None)
                 item['category'] = listing['merch_class']
                 item['in_store'] = listing.get('pick_up_in_store', False)
-                item['description'] = listing.get('title', 'None Given')
+                item['description'] = listing.get('title', None)
                 item['url'] = 'www.target.com' + listing['url']
-                item['rating'] = listing.get('average_rating', 'None Given')
+                item['rating'] = listing.get('average_rating', None)
                 item['num_ratings'] = listing.get('total_reviews', 0)
-                item['name'] = listing.get('title', 'None Given')
+                item['name'] = listing.get('title', None)
                 item['img_url'] = listing['images'][0]['base_url'] + listing['images'][0]['primary']
                 yield item
-            else:
+            elif listing['tcin'] in self.upcs:
                 self.dupes += 1
                 if not self.dupes % 10000:
-                    self.logger.info('%s already seen? %s dupes' % (listing.get('title', 'None Given'), self.dupes))
+                    self.logger.info('%s dupes seen so far' % self.dupes)

@@ -1,4 +1,5 @@
 from twisted.enterprise import adbapi
+from walmart.settings import CRAWL_NUMBER
 
 
 class MySQLPipeline(object):
@@ -17,6 +18,7 @@ class MySQLPipeline(object):
             user=settings['MYSQL_USER'],
             passwd=settings['MYSQL_PWORD'],
             charset='utf8',
+            autocommit=True,
             use_unicode=True
         )
         dbpool = adbapi.ConnectionPool('pymysql', **dbargs)
@@ -39,8 +41,9 @@ class MySQLPipeline(object):
         spider.logger.error(failure)
 
     def insert_item(self, conn, item, spider):
-    	keys = ['name', 'price', 'img', 'listing_url', 'page_url', 'rating', 'num_ratings', 'product_id']
-        vals = [item.get(k, 'None') for k in keys]
-        conn.execute("""INSERT INTO amazon_products (name, price, img_url, product_url, listing_page_url,
-                            rating, num_ratings, asin) 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""", vals)
+    	keys = [ 'external_id', 'name', 'img_url', 'product_url', 'upc', 'department', 'rating', 'num_ratings', 'seller', 'price', 'description', 'category', 'brand', 'quantity']
+        vals = [item.get(k) for k in keys] + [CRAWL_NUMBER]
+        conn.execute("""INSERT INTO walmart_products (external_id, name, img_url, product_url,
+        				upc, department, rating, num_ratings, seller, price, description,
+        				category, brand, quantity, crawl_num)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""", vals)
