@@ -1,68 +1,121 @@
-# This package will contain the spiders of your Scrapy project
-#
-# Please refer to the documentation for information on how to create and manage
-# your spiders.
-import scrapy, json, logging, random
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+import scrapy, json
 from urllib import urlencode
-from scrapy.shell import inspect_response
 from scrapy import Request
 from target.items import TargetItem
+from urlparse import urlparse, parse_qs
 
-
-numListings = 95 #anything > 95 throws an error
-# top level categories
-categories = ['0htu7', '5xtd3', '55b0t', '5xtbp', '5xtly', '5xtvd', 'hz89j', '5xtnr', '5xtq9', '5xtg6', '5xsxe', '5xtg5', '5xtb0', '5xt85', '5xtz1', '5xsxr', '55r1x', '5xtzq', '5xu1n', '5xt1a', '5xsz1', '5xt44', '5xt3c', '5q0ga', '4xw74', '5o5g7', '5xsxu', '4ydi5']
 
 class TargetSpider(scrapy.Spider):
     name = 'target.com'
     search_url = 'https://redsky.target.com/v1/plp/search?'
+    find_cats_url = 'https://redoak.target.com/content-publish/pages/v1?'
     upcs = set()
-    visited = set()
     dupes = 0
-    sort_by = ["Featured", "price-high to low", "price-low to high", "average ratings", "best seller", "newest"]
+    sortHigh = "PriceHigh"
+    sortLow = "PriceLow"
+    allSorts = ['Featured', 'PriceLow', 'PriceHigh', 'RatingHigh', 'bestselling', 'newest']
+    start_urls = ['https://www.target.com']
+    itemsPerPage = 96  # anything > 96 throws an error
+    numPages = 13  # can only go 13 pages deep
+    targetSize = 2000
+    maxSize = 3000
+    # groupings with inaccurate or insufficient counts, or no distribution
+    ignore = ['deals', 'shipping & pickup', 'FPO/APO', 'Category']
 
-    def start_requests(self):
-        params = {'count': numListings, 'channel': 'web', 'pageId': '/c/', 'offset': '0'}
-        for cat in categories:
-            self.visited.add(cat)
-            params['category'] = cat
-            yield Request(self.search_url + urlencode(params), callback = self.parse_category2, meta = {'category' : cat})
+    def parse(self, response):
+        """extract top level categories from the homepage"""
+        params = {'channel': 'web', 'children': True}
+        urls = response.xpath('//a[@aria-hidden="true"]/@href').extract()
+        for url in urls:
+            departmentId = url.partition('-/N-')[2].split('?')[0].strip()
+            if departmentId:
+                params['url'] = url
+                yield Request(self.find_cats_url + urlencode(params), callback=self.get_seed_categories)
 
-
-    def parse_category2(self, response):
-        items = json.loads(response.body_as_unicode())
-        if not items.get('search_response'):
+    def get_seed_categories(self, response):
+        """get children of top level categories"""
+        try:
+            categories = json.loads(response.body_as_unicode())['metadata']['children']
+        except KeyError:
+            self.logger.info('url %s did not have the JSON object' % response.url)
             raise StopIteration
-        cat = response.meta['category']
-        params = {'count': numListings, 'category': cat, 'channel': 'web', 'pageId': '/c/'}
-        params['sort_by'] = random.choice(self.sort_by)
-        totalListings = int(items['search_response']['metaData'][1]['value'])
-        totalPages = int(items['search_response']['metaData'][4]['value'])
-        for offset in range(totalPages):
-            params['offset'] = numListings * offset
-            yield Request(self.search_url + urlencode(params), callback = self.parse_listing, dont_filter=True)
-        if numListings * totalPages < totalListings:
-            params['offset'] = 0
-            subcat = set()
-            for x in items['search_response'].get('facet_list', []):
-                for y in x['details']:
-                    if 'url' in y:
-                        subcat.add(y['url'].split('-/N-')[1])
-            for newcat in subcat - self.visited:
-                params['category'] = newcat
-                self.visited.add(newcat)
-                yield Request(self.search_url + urlencode(params), callback = self.parse_category2, meta = {'category' : cat})
+        for child in categories:
+            nodeId = child['node_id']
+            params = (nodeId, child['canonical_url'], child['seo_h1'])
+            self.logger.info('Node ID: %s, URL: %s, Name: %s' % params)
+            url = self.search_url + urlencode({'category': nodeId, 'channel': 'web'})
+            yield Request(url, callback=self.expand_category)
 
+    def parse_target_qs(self, url):
+        # get the category id and facet from the query string
+        parsed_url = urlparse(url)
+        qs = parse_qs(parsed_url.query)
+        return qs.get('category', [''])[0], qs.get('faceted_value', [''])[0]
 
-    def parse_listing(self, response):
+    def generate_listing_requests(self, catId, oldFacet, numItems):
+        params = {'count': self.itemsPerPage, 'category': catId}
+        if oldFacet:
+            params['faceted_value'] = oldFacet
+        if numItems > self.maxSize:
+            sort = self.allSorts
+        elif numItems < 1500:
+            sort = [self.sortLow]
+        else:
+            sort = [self.sortLow, self.sortHigh]
+        for s in sort:
+            params['sort_by'] = s
+            for page in xrange(min(self.numPages, numItems / self.itemsPerPage)):
+                params['offset'] = page * self.itemsPerPage
+                yield Request(self.search_url + urlencode(params), self.parse_listings)
+
+    def expand_category(self, response):
+        """if necessary further reduce category size by recursively adding
+        facets, otherwise make the call to get_listings"""
+        category, facet_list = self.parse_target_qs(response.url)
+        obj = json.loads(response.body_as_unicode())['search_response']
+        total = int(obj['metaData'][1]['value'])
+        if total > self.maxSize:
+            existing = response.meta.get('existing', [])
+            for facets in obj['facet_list']:
+                name = facets['displayName']
+                subset = sum(x.get('count', 0) for x in facets['details'])
+                if name in self.ignore + existing or not total * .75 < subset < total * 1.25:
+                    continue
+                # use first filter that meets critieria
+                filters = sorted([(x['count'], x['facetId']) for x in facets['details'] if x.get('facetId')])
+                cur = 0
+                params = {'category': category}
+                group = [facet_list]
+                while filters:
+                    count, facet = filters.pop()
+                    group.append(facet)
+                    cur += count
+                    if cur > self.targetSize or not filters:
+                        params['faceted_value'] = 'Z'.join([x for x in group if x])
+                        # store used facets in the meta dict for recursive call
+                        yield Request(self.search_url + urlencode(params), self.expand_category,
+                                      meta={'existing': existing + [name]})
+                        cur = 0
+                        group = [facet_list]
+                raise StopIteration
+            self.logger.info("Unable to reduce url: %s below %s items" % (response.url, total))
+        # all filters have already been applied,
+        # or the category has been filtered to a small enough amount
+        for req in self.generate_listing_requests(category, facet_list, total):
+            yield req
+
+    def parse_listings(self, response):
         try:
             items = json.loads(response.body_as_unicode())['search_response']['items']['Item']
         except ValueError:
-            yield Request(response.url, dont_filter=True, callback=self.parse_listing)
+            # make the same request and the json object usually appears
+            yield Request(response.url, dont_filter=True, callback=self.parse_listings)
             raise StopIteration
         for listing in items:
             if listing['tcin'] not in self.upcs and not listing.get('error_message'):
-                self.upcs.add(listing['tcin'])
+                self.upcs.add(listing['tcin'])  
                 item = TargetItem()
                 if listing['offer_price'].get('formatted_price'):
                     price = listing['offer_price']['formatted_price'].replace('$', '').replace(',', '')
@@ -78,16 +131,17 @@ class TargetSpider(scrapy.Spider):
                 else:
                     item['price'] = listing['offer_price'].get('min_price', 0)
                 item['external_id'] = listing['tcin']
-                item['brand'] = listing.get('brand', None)
-                item['avail'] = listing.get('availability_status', None)
+                item['brand'] = listing.get('brand')
+                item['avail'] = listing.get('availability_status')
                 item['category'] = listing['merch_class']
                 item['in_store'] = listing.get('pick_up_in_store', False)
-                item['description'] = listing.get('title', None)
+                item['description'] = listing.get('title')
                 item['url'] = 'www.target.com' + listing['url']
-                item['rating'] = listing.get('average_rating', None)
+                item['rating'] = listing.get('average_rating')
                 item['num_ratings'] = listing.get('total_reviews', 0)
-                item['name'] = listing.get('title', None)
+                item['name'] = listing.get('title')
                 item['img_url'] = listing['images'][0]['base_url'] + listing['images'][0]['primary']
+                item['upc'] = listing.get('upc')
                 yield item
             elif listing['tcin'] in self.upcs:
                 self.dupes += 1

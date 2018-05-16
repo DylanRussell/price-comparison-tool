@@ -1,0 +1,97 @@
+{% import 'bootstrap/wtf.html' as wtf %}
+{% extends "base.html" %}
+{% block content %}
+
+  <div class="row">
+   <div class="col-md-6 col-sm-6 col-xs-12">
+    <form method="post">
+     <div class="form-group ">
+      <label class="control-label" for="category">
+       Select a Category
+      </label>
+      <select class="select form-control" id="category" name="category">
+        {% for category in categories|sort %}
+          <option value="{{category}}">{{category}}</option>
+        {% endfor %}
+      </select>
+     </div>
+     <div class="form-group ">
+      <label class="control-label" for="product">
+       Select a Product
+      </label>
+      <select class="select form-control" id="product" name="product">
+      </select>
+     </div>
+    </form>
+    <img src="" id="prodImg">
+    <div class="panel panel-danger">
+      <div class="panel-heading">Target</div>
+      <ul class="list-group">
+        <li class="list-group-item"><span class="h5">Price: </span><span id="targetPrice"></span></li>
+        <li class="list-group-item"><span class="h5">Rating Value: </span><span id="targetRating"></span></li>
+        <li class="list-group-item"><span class="h5">Number of Ratings: </span><span id="targetNumRatings"></span></li>
+        <li class="list-group-item"><span class="h5">Product URL: </span><a id="targetUrl" href="#">Listing URL</a></li>
+      </ul>
+    </div>
+    <div class="panel panel-primary">
+      <div class="panel-heading">Walmart</div>
+      <ul class="list-group">
+        <li class="list-group-item"><span class="h5">Price: </span><span id="walmartPrice"></span></li>
+        <li class="list-group-item"><span class="h5">Rating Value: </span><span id="walmartRating"></span></li>
+        <li class="list-group-item"><span class="h5">Number of Ratings: </span><span id="walmartNumRatings"></span></li>
+        <li class="list-group-item"><span class="h5">Product URL: </span><a id="walmartUrl" href="#">Listing URL</a></li>
+      </ul>
+    </div>
+  </div>
+
+
+{% block footer %}
+{{super()}}
+{% endblock %}
+</div> <!-- /container -->
+{% endblock %}
+{% block scripts %}
+{{super()}}
+<script type="text/javascript">
+  $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
+  var categories = {{ categories | tojson | safe}};
+  var products = {{ products | tojson | safe}};
+  $('#retailer').change(function() {
+    var retailer = $('#retailer').val();
+    if (retailer) {
+      $.ajax({url: $SCRIPT_ROOT + "/get/categories",
+              data: {'retailer': retailer},
+              method: 'POST',
+              success: function(result){
+                $('#category').empty();
+                for (index = 0; index < result['categories'].length; ++index) {
+                  $('#category').append("<option>" + result['categories'][index] + "</option>");
+                }
+              }
+          })
+        }
+      })
+  $('#category').change(function() {
+
+      var category = $('#category').val();
+      $('#product').empty();
+      $('#product').append("<option>Select A Product</option>");
+      for (index = 0; index < categories[category].length; ++index) {
+        $('#product').append("<option value='" + categories[category][index][1] + "'>" + categories[category][index][0] + "</option>");
+      }
+    })
+  $("#product").change(function() {
+    product = products[$("#product > option:selected").val()]
+    $("#prodImg").attr('src', product[6]);
+    $("#targetPrice").text(product[0]);
+    $("#targetRating").text(product[2]);
+    $("#targetNumRatings").text(product[4]);
+    $("#targetUrl").attr('href', 'https://' + product[8]);
+    $("#walmartPrice").text(product[1]);
+    $("#walmartRating").text(product[3]);
+    $("#walmartNumRatings").text(product[5]);
+    $("#walmartUrl").attr('href', product[7]);
+    // (tPrice, wPrice, tRating, pRating, tRatings, wRatings, imgUrl, wURL, tURL)
+  })
+</script>
+{% endblock %}

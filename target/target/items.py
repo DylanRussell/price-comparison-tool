@@ -21,3 +21,4 @@ class TargetItem(scrapy.Item):
     name = scrapy.Field()
     img_url = scrapy.Field()
     external_id = scrapy.Field()
+    upc = scrapy.Field()

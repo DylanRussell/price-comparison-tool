@@ -1,0 +1,37 @@
+{% extends "bootstrap/base.html" %}
+{% block title %}priceCompare{% endblock %}
+{% block head %}
+{{super()}}
+{% endblock %}
+{% block navbar %}
+<div class="container">
+
+	<nav class="navbar navbar-default">
+	    <div class="navbar-header">
+	      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1" aria-expanded="false">
+	        <span class="sr-only">Toggle navigation</span>
+	        <span class="icon-bar"></span>
+	        <span class="icon-bar"></span>
+	        <span class="icon-bar"></span>
+	      </button>
+	    </div>
+
+	    <!-- Collect the nav links, forms, and other content for toggling -->
+	    <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
+	      <ul class="nav navbar-nav">
+
+	        <li role="presentation" {% if request.endpoint == 'home' %} class="active" {% endif %}><a href="{{url_for('home')}}">Compare Categories</a></li>
+	        <li role="presentation" {% if request.endpoint == 'compare' %} class="active" {% endif %}><a href="{{url_for('compare')}}">Compare Prices</a></li>
+	      </ul>
+
+	    </div><!-- /.navbar-collapse -->
+	</nav>
+{% endblock %}
+{% block content %}
+{{super()}}
+{% block footer %}
+<!-- <footer class="footer col-sm-12">
+    <p>&copy; 2016 Awesome, Inc.</p>
+</footer> -->
+{% endblock footer %}
+{% endblock content %}

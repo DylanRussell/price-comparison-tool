@@ -39,8 +39,8 @@ class MySQLPipeline(object):
         spider.logger.error(failure)
 
     def insert_item(self, conn, item, spider):
-    	keys = ['name', 'price', 'img', 'listing_url', 'page_url', 'rating', 'num_ratings', 'product_id']
-        vals = [item.get(k, 'None') for k in keys]
+        keys = ['name', 'price', 'img', 'listing_url', 'page_url', 'rating', 'num_ratings', 'product_id']
+        vals = [item.get(k) for k in keys]
         conn.execute("""INSERT INTO amazon_products (name, price, img_url, product_url, listing_page_url,
                             rating, num_ratings, asin) 
                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""", vals)

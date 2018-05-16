@@ -1,22 +1,16 @@
-# This package will contain the spiders of your Scrapy project
-#
-# Please refer to the documentation for information on how to create and manage
-# your spiders.
 import scrapy, redis, time
 from amazon_crawler.items import ProductItem
 from amazon_crawler.settings import REDIS_PORT, REDIS_HOST, IS_PARENT
-from scrapy.shell import inspect_response
 from urllib import urlencode
 from urlparse import urlparse, urlunparse, parse_qs
 from twisted.internet import reactor, defer
 
 
-
-
 def sleep_for(secs):
-  d = defer.Deferred()
-  reactor.callLater(secs, d.callback, None)
-  return d
+    # async sleep
+    d = defer.Deferred()
+    reactor.callLater(secs, d.callback, None)
+    return d
 
 
 class AmazonSpider(scrapy.Spider):
@@ -25,6 +19,7 @@ class AmazonSpider(scrapy.Spider):
     conn = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT)
     seenKey = 'products_seen'
     urlFrontierKey = 'url_frontier'
+    # start from a few top level categories
     seeds = [
         'https://www.amazon.com/Televisions-Video/b/ref=sd_allcat_tv?ie=UTF8&node=1266092011',
         'https://www.amazon.com/Home-Audio-Electronics/b/ref=sd_allcat_hat?ie=UTF8&node=667846011',
@@ -33,7 +28,9 @@ class AmazonSpider(scrapy.Spider):
         'https://www.amazon.com/Headphones-Accessories-Supplies/b/ref=sd_allcat_headphones?ie=UTF8&node=172541'
     ]
 
-    def start_requests( self ):
+    def start_requests(self):
+        """Parent node explores seed URLs, then acts same as other nodes:
+        pops urls off the frontier and makes request"""
         for seed in self.seeds:
             if IS_PARENT:
                 yield scrapy.Request(seed, self.parse)
@@ -46,11 +43,12 @@ class AmazonSpider(scrapy.Spider):
             else:
                 sleep *= 2
             if sleep >= 256:
-                raise StopIteration 
+                raise StopIteration
             sleep_for(sleep)
 
     def parse(self, response):
-        # possible xpath: '//div[@id="leftNav"]/ul[1]/ul//a/@href'
+        """From seed category URLS, discover subcategory URLS, 
+        push most onto redis queue (url frontier)"""
         s1 = set(response.xpath('//div[@id="leftNav"]//a/@href').extract())
         s2 = set(response.xpath('//div[@class="a-section acs_dNav__carousels-container"]//a/@href').extract())
         s3 = set(response.xpath('//span[@class="category-link__text"]/../@href').extract())
@@ -63,6 +61,8 @@ class AmazonSpider(scrapy.Spider):
         self.logger.info("category link {} yielded {} sub categories".format(response.url, len(subcategories)))
 
     def parse_subcat(self, response):
+        """Find product listings, add next page to URL frontier, if exists.
+        Keep track of products seen in redis LRU cache to avoid dupes"""
         for div in response.xpath('//div[@class="s-item-container"]'):
             if not div.xpath('./*') or not div.xpath('.//img/@src').extract_first():
                 continue
@@ -94,9 +94,10 @@ class AmazonSpider(scrapy.Spider):
 
 
 def format_url(url):
+    # strip off possible tracking params added by amazon
     allowed_params = {"node", "rh", "page"}
     u = urlparse(url)
     query = parse_qs(u.query)
-    query = {k:v for k, v in query.items() if k in allowed_params}
+    query = {k: v for k, v in query.items() if k in allowed_params}
     u = u._replace(query=urlencode(query, True))
     return urlunparse(u)
