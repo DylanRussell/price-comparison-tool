@@ -38,8 +38,6 @@ class Walmart(scrapy.Spider):
             yield Request(self.seed, self.parse)
 
     def idle(self):
-        # safe to clear product IDs, spider finished crawling a department
-        self.products_harvested.clear()
         self.logger.info('Spider idle, fetching a top level department from redis...')
         url = self.conn.rpop(self.seed_depts_key)
         if url:
@@ -49,7 +47,7 @@ class Walmart(scrapy.Spider):
     def parse(self, response):
         """Get top level department urls, push them onto redis queue"""
         obj = response.text.partition('window.__WML_REDUX_INITIAL_STATE__ = ')[2].partition('};')[0] + '}'
-            
+        obj = json.loads(obj)
         departments = obj['preso']['facets'][0]['values']
         numDepartments = len(departments)
         departments = [(d['itemCount'], d['url']) for d in departments]
@@ -57,6 +55,7 @@ class Walmart(scrapy.Spider):
         for itemCount, catId in sorted(departments):
             url = self.base + catId
             self.conn.rpush(self.seed_depts_key, url)
+            # yield Request(url, self.parse_category)
         self.logger.info('%s department links found from all departments page' % numDepartments)
 
     def generate_listing_requests(self, catId, oldFacet, numItems):
@@ -79,7 +78,7 @@ class Walmart(scrapy.Spider):
         # get the category id and facet from the query string
         parsed_url = urlparse(url)
         qs = parse_qs(parsed_url.query)
-        return qs.get('cat_id', [''])[0], qs.get('facet', [''])[0].decode('utf-8', 'ignore')
+        return qs.get('cat_id', [''])[0], qs.get('facet', [''])[0]
 
     def parse_category(self, response):
         # load json object containing facets
@@ -89,19 +88,23 @@ class Walmart(scrapy.Spider):
         except ValueError:
             self.logger.error('URL: %s did not have the json object' % response.url)
             raise StopIteration
-        catId, oldFacet = self.parse_walmart_qs(response.url)
         numItems = obj['preso']['requestContext']['itemCount']['total']
-        if numItems > self.maxSize:  # category too big, try to add a facet
-            existing = set(re.findall(r'([a-z_A-Z]*):', oldFacet))
+        catId, oldFacet = self.parse_walmart_qs(response.url)
+        # category is small enough to fetch items from...
+        if numItems < self.maxSize:
+            for req in self.generate_listing_requests(catId, oldFacet, numItems):
+                yield req
+        # special case here - don't need to apply a facet yet,
+        # can recurse into a more narrow category
+        # nested category always listed as the first facet, if exists
+        elif obj['preso']['facets'][0]['type'] == 'cat_id':
+            for f in obj['preso']['facets'][0]['values']:
+                yield Request(self.base + f['url'], self.parse_category)
+        # try to apply a facet
+        else:
+            existing = set(re.findall(r'([a-z_A-Z/-]*):', oldFacet))
             for facet in obj['preso']['facets']:
                 name = facet['type']
-                # special case here - don't need to apply a facet yet,
-                # can recurse into a more narrow category
-                if name == 'cat_id':
-                    for f in facet['values']:
-                        url = self.base + f['url'].decode('utf-8', 'ignore')
-                        yield Request(url, self.parse_category)
-                    raise StopIteration
                 total = sum(x.get('itemCount', 0) for x in facet['values'])
                 # apply facet as long as it hasn't been applied already
                 # and contains most of the category
@@ -118,17 +121,16 @@ class Walmart(scrapy.Spider):
                             new = [name + ':' + x for x in group]
                             if oldFacet:
                                 new.append(oldFacet)
-                            params['facet'] = '||'.join(new).decode('utf-8', 'ignore')
-                            url = self.base + urlencode(params)
+                            params['facet'] = '||'.join(new)
+                            url = self.base + urlencode(encoded_dict(params))
                             yield Request(url, self.parse_category)
                             cur = 0
                             group = []
                     raise StopIteration
             self.logger.info('Unable to reduce number of items below %s for url: %s,' % (numItems, response.url))
-        # all facets have already been applied,
-        # or the category has been filtered to a small enough amount
-        for req in self.generate_listing_requests(catId, oldFacet, numItems):
-            yield req
+            # wasn't able to apply facet..
+            for req in self.generate_listing_requests(catId, oldFacet, numItems):
+                yield req
 
     def parse_listings(self, response):
         """Parses all Items found in JSON object, filters out duplicates."""
@@ -145,7 +147,7 @@ class Walmart(scrapy.Spider):
                 i = WalmartItem()
                 i['img_url'] = item.get('imageUrl')
                 i['external_id'] = item['productId']
-                i['name'] = item['title']
+                i['name'] = item['title'].replace('"', '')
                 i['product_url'] = self.domain + item['productPageUrl']
                 i['upc'] = item.get('upc')
                 i['department'] = item.get('department')
@@ -159,9 +161,21 @@ class Walmart(scrapy.Spider):
                     except KeyError:
                         i['price'] = None
                 else:
-                    i['price'] = float(offer.get('offerPrice', 0))
-                i['description'] = item.get('description')
+                    i['price'] = float(offer.get('offerPrice', 0)) or None
+                i['description'] = item.get('description', '').replace('"', '')
                 i['category'] = item.get('seeAllName')
-                i['brand'] = item['brand'][0] if item.get('brand') else None
+                i['brand'] = item.get('brand', [''])[0]
                 i['quantity'] = item.get('quantity')
                 yield i
+
+
+def encoded_dict(in_dict):
+    out_dict = {}
+    for k, v in in_dict.iteritems():
+        if isinstance(v, unicode):
+            v = v.encode('utf8', 'ignore')
+        elif isinstance(v, str):
+            # Must be encoded in UTF-8
+            v.decode('utf8')
+        out_dict[k] = v
+    return out_dict

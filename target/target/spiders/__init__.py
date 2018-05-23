@@ -32,7 +32,7 @@ class TargetSpider(scrapy.Spider):
             departmentId = url.partition('-/N-')[2].split('?')[0].strip()
             if departmentId:
                 params['url'] = url
-                yield Request(self.find_cats_url + urlencode(params), callback=self.get_seed_categories)
+                yield Request(self.find_cats_url + urlencode(params), self.get_seed_categories)
 
     def get_seed_categories(self, response):
         """get children of top level categories"""
@@ -135,11 +135,11 @@ class TargetSpider(scrapy.Spider):
                 item['avail'] = listing.get('availability_status')
                 item['category'] = listing['merch_class']
                 item['in_store'] = listing.get('pick_up_in_store', False)
-                item['description'] = listing.get('title')
+                item['description'] = listing.get('title', '').replace('"', '')
                 item['url'] = 'www.target.com' + listing['url']
                 item['rating'] = listing.get('average_rating')
                 item['num_ratings'] = listing.get('total_reviews', 0)
-                item['name'] = listing.get('title')
+                item['name'] = listing.get('title', '').replace('"', '')
                 item['img_url'] = listing['images'][0]['base_url'] + listing['images'][0]['primary']
                 item['upc'] = listing.get('upc')
                 yield item

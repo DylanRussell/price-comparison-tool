@@ -22,6 +22,7 @@
 
 	        <li role="presentation" {% if request.endpoint == 'home' %} class="active" {% endif %}><a href="{{url_for('home')}}">Compare Categories</a></li>
 	        <li role="presentation" {% if request.endpoint == 'compare' %} class="active" {% endif %}><a href="{{url_for('compare')}}">Compare Prices</a></li>
+			<li role="presentation" {% if request.endpoint == 'slide_deck' %} class="active" {% endif %}><a href="{{url_for('slide_deck')}}">Slide Show</a></li>
 	      </ul>
 
 	    </div><!-- /.navbar-collapse -->

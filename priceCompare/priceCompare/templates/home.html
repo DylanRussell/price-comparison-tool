@@ -4,7 +4,6 @@
 
   <div class="row">
    <div class="col-md-6 col-sm-6 col-xs-12">
-    <form method="post">
      <div class="form-group ">
       <label class="control-label " for="retailer">
        Select a Retailer
@@ -23,11 +22,8 @@
       <select class="select form-control" id="category" name="category">
       </select>
      </div>
-    </form>
-    <div id="container"></div>
    </div>
    <div class="col-md-6 col-sm-6 col-xs-12">
-    <form method="post">
      <div class="form-group ">
       <label class="control-label " for="retailer2">
        Select a Retailer
@@ -46,9 +42,8 @@
       <select class="select form-control" id="category2" name="category2">
       </select>
      </div>
-    </form>
-    <div id="container2"></div>
-   </div>
+  </div>
+  <div class="col-md-12" id="container">
   </div>
 
 
@@ -82,16 +77,12 @@
         }
       })
   $('#category, #category2').change(function() {
-    var category = $(this).val()
-    if($(this).is('#category')){
-      var selector = '#container';
-      var retailer = $("#retailer").val();
-    } else {
-      var selector = '#container2';
-      var retailer = $("#retailer2").val();
-    }
+    var selector = '#container';
     $.ajax({url: $SCRIPT_ROOT + "/get/category/histogram",
-            data: {'retailer': retailer, 'category': category},
+            data: {'retailer1': $("#retailer").val(), 
+                   'retailer2': $("#retailer2").val(),
+                   'category1': $("#category").val(),
+                   'category2': $("#category2").val()},
             method: 'POST',
             success: function(data){
               var graph = $(selector);
