@@ -15,7 +15,7 @@ CREATE TABLE `amazon_products` (
   `num_ratings` varchar(50) DEFAULT NULL,
   `asin` varchar(50) DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 -- ----------------------------
 -- Table structure for categories
