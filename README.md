@@ -4,13 +4,13 @@
 
 For my insight project I built a web crawler using the Python web scraping framework Scrapy to scrape product listings from Dollar General, Walmart, Target, and Amazon. I stored the listings in a MySQL database, and used redis to scale the crawl across nodes. A small web app to display histograms and compare products across retailers was built with Flask.
 
-[Demo](www.spideycents.com)
+[Demo](http://www.spideycents.com)
 
 ## Set Up
 
 The code was tested and run on Python v2.7.
 
-####Required Libraries for running any of the Web Crawler:
+#### Required Libraries for running any of the Web Crawler:
 
 `scrapy==1.5.0`
 `redis==2.10.6`
@@ -23,7 +23,7 @@ Crawlers can be run without these libraries by commenting out a few lines in the
 
 The remaining required libraries are included in most Python distributions (i.e. `json`, `re`, `urllib`, `urlparse`).
 
-##Required Libraries for running the Web App:
+## Required Libraries for running the Web App:
 
 `Flask==1.0.2`
 `Flask-Bootstrap==3.3.7.1`
@@ -33,7 +33,7 @@ The remaining required libraries are included in most Python distributions (i.e.
 `numpy==1.14.3`
 
 
-##Crawling Strategy:
+## Crawling Strategy:
 
 My high level goal was to maximize the number of listings retrieved while minimizing the number of requests made. 
 
@@ -49,7 +49,7 @@ To reach this chunk size, I have a recursive function which:
 The recursion ends once I reach the target chunk size or I have reached the bottom of the product tree and exhausted all filters.
 
 
-##Usage of Redis:
+## Usage of Redis:
 
 The Dollar General / Target crawls did not require Redis, as they were realtively small.
 
