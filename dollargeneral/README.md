@@ -1,0 +1,3 @@
+# dollargeneral.com web crawler
+
+Scrapy web crawler for dollargeneral.com. Logic for following links, extracting listings is [here](dollargeneral/spiders/__init__.py). A listing is represented by a DGListing object, defined [here](dollargeneral/items.py). Listings, once extracted, are processed by the MySQLPipeline class defined [here](dollargeneral/pipelines.py). Crawl speed, database connection settings, pipeline settings are all defined in [settings.py](dollargeneral/settings.py).

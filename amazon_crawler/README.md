@@ -1,0 +1,3 @@
+# amazon.com web crawler
+
+Scrapy web crawler for amazon.com. Logic for following links, extracting listings is [here](amazon_crawler/spiders/__init__.py). A listing is represented by a ProductItem object, defined [here](amazon_crawler/items.py). Listings, once extracted, are processed by the MySQLPipeline class defined [here](amazon_crawler/pipelines.py). Crawl speed, database connection settings, pipeline settings are all defined in [settings.py](amazon_crawler/settings.py).

@@ -31,8 +31,8 @@ class AmazonSpider(scrapy.Spider):
     def start_requests(self):
         """Parent node explores seed URLs, then acts same as other nodes:
         pops urls off the frontier and makes request"""
-        for seed in self.seeds:
-            if IS_PARENT:
+        if IS_PARENT:
+            for seed in self.seeds:
                 yield scrapy.Request(seed, self.parse)
         sleep = .5
         while True:
@@ -43,11 +43,12 @@ class AmazonSpider(scrapy.Spider):
             else:
                 sleep *= 2
             if sleep >= 256:
+                # crawl finished
                 raise StopIteration
             sleep_for(sleep)
 
     def parse(self, response):
-        """From seed category URLS, discover subcategory URLS, 
+        """From seed category URLS, discover subcategory URLS,
         push most onto redis queue (url frontier)"""
         s1 = set(response.xpath('//div[@id="leftNav"]//a/@href').extract())
         s2 = set(response.xpath('//div[@class="a-section acs_dNav__carousels-container"]//a/@href').extract())
@@ -78,7 +79,7 @@ class AmazonSpider(scrapy.Spider):
                 dollars = int(div.xpath('.//span[@class="sx-price-whole"]/text()').extract_first().replace(',', ''))
                 cents = float(div.xpath('.//sup[@class="sx-price-fractional"]/text()').extract_first()) / 100
                 item['price'] = str(dollars + cents)
-            except (TypeError, AttributeError) as e:
+            except (TypeError, AttributeError):
                 item['price'] = div.xpath('.//span[@class="a-size-base a-color-base"]/text()').extract_first()
             rating = div.xpath('.//i[contains(@class, "a-icon-star")]/span/text()').extract_first()
             item['rating'] = rating.split()[0] if rating else '0'

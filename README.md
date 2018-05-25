@@ -10,7 +10,7 @@ For my insight project I built a web crawler using the Python web scraping frame
 
 The code was tested and run on Python v2.7.
 
-#### Required Libraries for running any of the Web Crawler:
+#### Required Libraries for running any of the Web Crawlers:
 
 `scrapy==1.5.0`
 `redis==2.10.6`
@@ -23,7 +23,7 @@ Crawlers can be run without these libraries by commenting out a few lines in the
 
 The remaining required libraries are included in most Python distributions (i.e. `json`, `re`, `urllib`, `urlparse`).
 
-## Required Libraries for running the Web App:
+#### Required Libraries for running the Web App:
 
 `Flask==1.0.2`
 `Flask-Bootstrap==3.3.7.1`
@@ -54,10 +54,17 @@ The recursion ends once I reach the target chunk size or I have reached the bott
 The Dollar General / Target crawls did not require Redis, as they were realtively small.
 
 My first attempt at using Redis can be seen in the Amazon web crawler. One node marked as the 'parent' node discovers the top level sub category URLs
-and pushes them onto a redis LIFO queue. Each node (including the parent node) then continuously pops links from this queue, and pushes newly discovered links onto it until the queue is empty and the crawl has ended. Product IDs are checked against a LRU cache in Redis and added if they haven't been seen before.
+and pushes them onto a redis LIFO queue. Each node (including the parent node) then continuously pops links from this queue, and pushes newly discovered links onto it until the queue is empty and the crawl has ended. Product IDs are checked against a LRU cache in Redis and added if they haven't been seen before. One nice thing about this approach was that the state of the crawl was stored in Redis.
 
-This approach resulted in a lot of time spent pushing to / popping from the queue. My second approach starts the same way, with a parent node pushing the top level categories onto a Redis LIFO queue. This time though, a crawler only pops a link off the queue when it reaches an idle state. It then crawls that category to completion before becoming idle again. By only following links that go deeper into the category I avoid colliding with the other crawls. Seen Product IDs can now be stored in a set internally and don't need to be shared across nodes. Top level categories are placed on the queue in order of increasing category size, so that the largest categories are popped off the queue first.
+This approach resulted in too much time spent pushing to / popping from the queue. Pushing/popping in batch may have solved this, but I thought of a simpler solution. 
+
+My second approach started the same way, with a parent node pushing the top level categories onto a Redis LIFO queue. This time though, a crawler only popped a link off the queue when it reacheed an idle state. It then crawled that category to completion before becoming idle again. By only following links that go deeper into the category I avoid colliding with the other crawls. Seen Product IDs were stored in a set internally and didn't need to be shared across nodes. Top level categories were placed on the queue in order of increasing category size, so that the largest categories were popped off the queue first.
 
 An example of my second approach can be seen in the Walmart crawler.
 
+
+## Future Improvements:
+
+1. Use a database better suited for big data. Append only datastore with fast write performance.
+2. Scrape websites through their product search endpoint only. It is possible to get all products this way as a search is done against the entire product catalogue. The scraping logic would be less prone to breaking as it would only rely on a single endpoint.
 
